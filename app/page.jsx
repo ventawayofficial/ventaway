@@ -36,6 +36,29 @@ const features = [
   },
 ];
 
+const featureMockups = [
+  {
+    src: "/mockup/home.png",
+    alt: "Ventaway home screen mockup",
+    className: "sm:translate-y-8 lg:rotate-[-6deg]",
+  },
+  {
+    src: "/mockup/1.png",
+    alt: "Ventaway conversation mockup",
+    className: "sm:-translate-y-4 lg:translate-y-6 lg:rotate-[5deg]",
+  },
+  {
+    src: "/mockup/2.png",
+    alt: "Ventaway support flow mockup",
+    className: "sm:translate-y-2 lg:rotate-[6deg]",
+  },
+  {
+    src: "/mockup/prifile.png",
+    alt: "Ventaway profile screen mockup",
+    className: "sm:-translate-y-6 lg:translate-y-10 lg:rotate-[-5deg]",
+  },
+];
+
 const steps = [
   { num: "01", title: "Choose your mood" },
   { num: "02", title: "Get matched instantly" },
@@ -186,14 +209,42 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-8 md:grid-cols-3">
-            {features.map((feature) => (
-              <Feature
-                key={feature.title}
-                title={feature.title}
-                desc={feature.desc}
-              />
-            ))}
+          <div className="grid gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+            <div className="relative">
+              <div className="absolute left-1/2 top-1/2 -z-10 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-200/40 blur-3xl" />
+              <div className="absolute inset-x-12 top-10 -z-10 h-64 rounded-[2rem] bg-[linear-gradient(135deg,rgba(255,255,255,0.6),rgba(207,250,254,0.5),rgba(191,219,254,0.4))] blur-2xl" />
+
+              <div className="grid gap-5 sm:grid-cols-2 lg:min-h-[42rem] lg:gap-6">
+                {featureMockups.map((mockup) => (
+                  <div
+                    key={mockup.src}
+                    className={`relative mx-auto w-full max-w-[14rem] ${mockup.className}`}
+                  >
+                    <div className="overflow-hidden rounded-[2rem] border border-white/80 bg-slate-950 p-2 shadow-[0_28px_60px_rgba(15,23,42,0.18)]">
+                      <div className="relative aspect-[9/19] overflow-hidden rounded-[1.55rem] bg-slate-900">
+                        <Image
+                          src={mockup.src}
+                          alt={mockup.alt}
+                          fill
+                          className="object-cover object-top"
+                          sizes="(max-width: 640px) 60vw, (max-width: 1024px) 28vw, 18vw"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-8 md:grid-cols-3 lg:grid-cols-1">
+              {features.map((feature) => (
+                <Feature
+                  key={feature.title}
+                  title={feature.title}
+                  desc={feature.desc}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -237,14 +288,47 @@ export default function Home() {
                 Join Ventaway and talk to someone who listens, understands, and
                 helps you feel lighter.
               </p>
+
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+                <StoreButton
+                  href="#"
+                  eyebrow="Download on the"
+                  label="App Store"
+                  icon={
+                    <Image
+                      src="/images/apple.png"
+                      alt=""
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 object-contain"
+                    />
+                  }
+                />
+                <StoreButton
+                  href="#"
+                  eyebrow="Get it on"
+                  label="Google Play"
+                  icon={<Image
+                      src="/images/playstore.png"
+                      alt=""
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 object-contain"
+                    />
+                  }
+                />
+              </div>
             </div>
 
-            <a
-              href="#"
-              className="inline-flex items-center justify-center rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-slate-950 transition hover:-translate-y-0.5 hover:bg-slate-100"
-            >
-              Get the App
-            </a>
+            <div className="rounded-[1.75rem] border border-white/12 bg-white/6 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.2)] backdrop-blur">
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-200">
+                Ready for launch
+              </p>
+              <p className="mt-3 max-w-xs text-lg font-semibold leading-8 text-white">
+                Store buttons are in place, so you can drop in the final iOS
+                and Android links when they are ready.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -281,5 +365,45 @@ function Step({ num, title }) {
         quickly.
       </p>
     </div>
+  );
+}
+
+function StoreButton({ href, eyebrow, label, icon }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex min-w-[220px] items-center gap-4 rounded-2xl border border-white/12 bg-white/8 px-5 py-4 text-left shadow-[0_16px_40px_rgba(15,23,42,0.18)] backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/12"
+    >
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-950 shadow-[0_12px_30px_rgba(15,23,42,0.18)]">
+        {icon}
+      </span>
+      <span>
+        <span className="block text-xs font-semibold uppercase tracking-[0.22em] text-teal-200">
+          {eyebrow}
+        </span>
+        <span className="mt-1 block text-xl font-semibold text-white">
+          {label}
+        </span>
+      </span>
+    </a>
+  );
+}
+
+function AndroidIcon() {
+  return (
+    <svg
+      className="h-7 w-7"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8 9.5h8m-7-3.5 1.2-2m4.6 2L16 4M7.5 10.5v5.5a1 1 0 0 0 1 1h.5v2a1 1 0 1 0 2 0v-2h2v2a1 1 0 1 0 2 0v-2h.5a1 1 0 0 0 1-1v-5.5c0-2.8-2.2-5-5-5s-5 2.2-5 5Zm-2 0v4m13-4v4M10 7.5h.01M14 7.5h.01"
+      />
+    </svg>
   );
 }
