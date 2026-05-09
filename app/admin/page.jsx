@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import HomeCardUploadForm from "./HomeCardUploadForm";
 import { redirect } from "next/navigation";
 
 const overviewCards = [
@@ -61,6 +62,7 @@ const views = [
   { key: "users", label: "Users" },
   { key: "posts", label: "Posts" },
   { key: "reports", label: "Reports" },
+  { key: "home-cards", label: "Home Cards" },
 ];
 
 export default async function AdminDashboard({ searchParams }) {
@@ -152,6 +154,7 @@ export default async function AdminDashboard({ searchParams }) {
   const searchSummary = searchQuery
     ? `Showing filtered results for "${searchQuery}".`
     : "Search by name, username, email, post text, report reason, or status.";
+  const showsSearch = activeView !== "home-cards";
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#f3fffd_0%,#eef8ff_42%,#f8fafc_100%)] text-slate-900">
@@ -237,30 +240,37 @@ export default async function AdminDashboard({ searchParams }) {
                   </p>
                 </div>
 
-                <form className="flex w-full max-w-2xl flex-col gap-3 sm:flex-row">
-                  <input type="hidden" name="view" value={activeView} />
-                  <input
-                    type="search"
-                    name="q"
-                    defaultValue={searchQuery}
-                    placeholder={`Search ${getViewLabel(activeView).toLowerCase()}`}
-                    className="h-12 flex-1 rounded-full border border-slate-200 bg-slate-50 px-5 text-sm text-slate-900 outline-none transition focus:border-teal-400 focus:bg-white"
-                  />
-                  <button
-                    type="submit"
-                    className="inline-flex h-12 items-center justify-center rounded-full bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  >
-                    Search
-                  </button>
-                  {searchQuery ? (
-                    <a
-                      href={buildAdminHref(activeView, "")}
-                      className="inline-flex h-12 items-center justify-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                {showsSearch ? (
+                  <form className="flex w-full max-w-2xl flex-col gap-3 sm:flex-row">
+                    <input type="hidden" name="view" value={activeView} />
+                    <input
+                      type="search"
+                      name="q"
+                      defaultValue={searchQuery}
+                      placeholder={`Search ${getViewLabel(activeView).toLowerCase()}`}
+                      className="h-12 flex-1 rounded-full border border-slate-200 bg-slate-50 px-5 text-sm text-slate-900 outline-none transition focus:border-teal-400 focus:bg-white"
+                    />
+                    <button
+                      type="submit"
+                      className="inline-flex h-12 items-center justify-center rounded-full bg-slate-950 px-6 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
-                      Clear
-                    </a>
-                  ) : null}
-                </form>
+                      Search
+                    </button>
+                    {searchQuery ? (
+                      <a
+                        href={buildAdminHref(activeView, "")}
+                        className="inline-flex h-12 items-center justify-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                      >
+                        Clear
+                      </a>
+                    ) : null}
+                  </form>
+                ) : (
+                  <div className="w-full max-w-2xl rounded-[1.5rem] border border-slate-200 bg-slate-50/80 px-5 py-4 text-sm leading-7 text-slate-600">
+                    Use this workspace to manage the homepage image cards for
+                    Venters, Listeners, and Community.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -481,6 +491,15 @@ export default async function AdminDashboard({ searchParams }) {
                     ],
                   }))}
                 />
+              </TablePanel>
+            ) : null}
+
+            {activeView === "home-cards" ? (
+              <TablePanel
+                title="Home card uploads"
+                description="Upload the images used for the homepage cards without leaving the admin dashboard."
+              >
+                <HomeCardUploadForm />
               </TablePanel>
             ) : null}
           </div>

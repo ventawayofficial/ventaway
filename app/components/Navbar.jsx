@@ -18,6 +18,7 @@ const adminLinks = [
   { href: "/admin?view=users", label: "Users" },
   { href: "/admin?view=posts", label: "Posts" },
   { href: "/admin?view=reports", label: "Reports" },
+  { href: "/admin?view=home-cards", label: "Home Cards" },
 ];
 
 export default function Navbar() {
@@ -272,6 +273,8 @@ function getAdminViewLabel(view) {
       return "Posts";
     case "reports":
       return "Reports";
+    case "home-cards":
+      return "Home Cards";
     default:
       return "Overview";
   }
