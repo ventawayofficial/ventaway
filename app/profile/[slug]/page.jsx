@@ -98,7 +98,7 @@ export default async function SharedProfilePage({ params }) {
                     {displayName}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    @{username} · Joined {formatJoinedDate(profile.createdat)}
+                    @{username} - Joined {formatJoinedDate(profile.createdat)}
                   </p>
                 </div>
               </div>
