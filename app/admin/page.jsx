@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import HomeCardUploadForm from "./HomeCardUploadForm";
+import HomeCardManager from "./HomeCardManager";
+import ModerationActionMenu from "./ModerationActionMenu";
 import { redirect } from "next/navigation";
 
 const overviewCards = [
@@ -70,6 +71,7 @@ export default async function AdminDashboard({ searchParams }) {
   const params = await searchParams;
   const searchQuery = normalizeSearch(params?.q);
   const activeView = normalizeView(params?.view);
+  const homeCardSection = normalizeHomeCardSection(params?.section);
 
   const {
     data: { session },
@@ -97,13 +99,14 @@ export default async function AdminDashboard({ searchParams }) {
     usersResult,
     postsResult,
     reportsResult,
+    homeCardImagesResult,
   ] = await Promise.all([
     supabase.from("users").select("*", { count: "exact", head: true }),
     supabase.from("posts").select("*", { count: "exact", head: true }),
     supabase
       .from("moderation_reports")
       .select("*", { count: "exact", head: true })
-      .neq("status", "resolved")
+      .neq("status", "actioned")
       .neq("status", "dismissed"),
     supabase
       .from("moderation_reports")
@@ -111,28 +114,32 @@ export default async function AdminDashboard({ searchParams }) {
       .in("status", ["pending", "reviewing"]),
     supabase
       .from("users")
-      .select("id, email, name, username, createdat, is_admin")
+      .select("id, email, name, username, createdat, is_admin, account_status")
       .order("createdat", { ascending: false })
       .limit(100),
     supabase
       .from("posts")
       .select(
-        'id, userid, content, "communityId", "mediaType", "mediaUrl", created_at, views'
+        'id, userid, content, "communityId", "mediaType", "mediaUrl", created_at, views, moderation_status'
       )
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
       .from("moderation_reports")
       .select(
-        "id, created_at, reporter_id, target_type, reported_user_id, reported_post_id, reason, details, status, resolved_at, resolved_by, moderator_note"
+        "id, created_at, reporter_id, target_type, reported_user_id, reported_post_id, reason, details, status, resolved_at, resolved_by, admin_note, action_taken"
       )
       .order("created_at", { ascending: false })
       .limit(100),
+    supabase.from("home_card_images").select("*").limit(300),
   ]);
 
   const users = filterUsers(usersResult.data ?? [], searchQuery);
   const posts = filterPosts(postsResult.data ?? [], searchQuery);
   const reports = filterReports(reportsResult.data ?? [], searchQuery);
+  const homeCardImages = sortHomeCardImages(
+    filterHomeCardImages(homeCardImagesResult.data ?? [], searchQuery, homeCardSection)
+  );
 
   const counts = {
     users: usersCountResult.count ?? 0,
@@ -140,6 +147,7 @@ export default async function AdminDashboard({ searchParams }) {
     reports: openReportsCountResult.count ?? 0,
     reviews: activeReviewsCountResult.count ?? 0,
   };
+  const homeCardCounts = countHomeCardImages(homeCardImagesResult.data ?? []);
 
   const errors = [
     usersCountResult.error?.message,
@@ -149,17 +157,20 @@ export default async function AdminDashboard({ searchParams }) {
     usersResult.error?.message,
     postsResult.error?.message,
     reportsResult.error?.message,
+    homeCardImagesResult.error?.message,
   ].filter(Boolean);
 
-  const searchSummary = searchQuery
-    ? `Showing filtered results for "${searchQuery}".`
-    : "Search by name, username, email, post text, report reason, or status.";
-  const showsSearch = activeView !== "home-cards";
+  const searchSummary = getAdminSearchSummary({
+    activeView,
+    searchQuery,
+    homeCardSection,
+  });
+  const showsSearch = true;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#f3fffd_0%,#eef8ff_42%,#f8fafc_100%)] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
-        <aside className="hidden bg-slate-950 px-5 py-6 text-white lg:block lg:h-screen lg:w-72 lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-white/10">
+        <aside className="hidden bg-slate-950 px-5 py-6 text-white lg:sticky lg:top-0 lg:block lg:h-screen lg:w-72 lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-white/10">
           <div className="flex h-full flex-col">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2 text-sm font-semibold text-teal-200">
@@ -227,7 +238,7 @@ export default async function AdminDashboard({ searchParams }) {
           </div>
         </aside>
 
-        <section className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:h-screen lg:overflow-y-auto lg:px-8 lg:py-8">
+        <section className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <div className="space-y-8">
             <div className="rounded-[1.75rem] border border-white/70 bg-white/88 p-5 shadow-[0_22px_60px_rgba(15,23,42,0.07)] backdrop-blur sm:p-6">
               <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
@@ -243,6 +254,9 @@ export default async function AdminDashboard({ searchParams }) {
                 {showsSearch ? (
                   <form className="flex w-full max-w-2xl flex-col gap-3 sm:flex-row">
                     <input type="hidden" name="view" value={activeView} />
+                    {activeView === "home-cards" && homeCardSection ? (
+                      <input type="hidden" name="section" value={homeCardSection} />
+                    ) : null}
                     <input
                       type="search"
                       name="q"
@@ -258,19 +272,18 @@ export default async function AdminDashboard({ searchParams }) {
                     </button>
                     {searchQuery ? (
                       <a
-                        href={buildAdminHref(activeView, "")}
+                        href={buildAdminHref(
+                          activeView,
+                          "",
+                          activeView === "home-cards" ? homeCardSection : ""
+                        )}
                         className="inline-flex h-12 items-center justify-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
                       >
                         Clear
                       </a>
                     ) : null}
                   </form>
-                ) : (
-                  <div className="w-full max-w-2xl rounded-[1.5rem] border border-slate-200 bg-slate-50/80 px-5 py-4 text-sm leading-7 text-slate-600">
-                    Use this workspace to manage the homepage image cards for
-                    Venters, Listeners, and Community.
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -369,10 +382,10 @@ export default async function AdminDashboard({ searchParams }) {
             {activeView === "users" ? (
               <TablePanel
                 title="Users"
-                description="A responsive table for browsing recent users and account roles."
+                description="A responsive table for browsing recent users, account roles, and moderation state."
               >
                 <ResponsiveTable
-                  columns={["User", "Email", "Username", "Joined", "Role"]}
+                  columns={["User", "Email", "Username", "Joined", "Role", "Status", "Actions"]}
                   emptyLabel="No users matched your search."
                   rows={users.map((user) => [
                     user.name || "Unnamed user",
@@ -384,6 +397,12 @@ export default async function AdminDashboard({ searchParams }) {
                       tone={user.is_admin ? "cyan" : "emerald"}
                       label={user.is_admin ? "Admin" : "User"}
                     />,
+                    <StatusPill
+                      key={`${user.id}-status`}
+                      tone={getAccountTone(user.account_status)}
+                      label={user.account_status || "active"}
+                    />,
+                    renderUserActionMenu(user),
                   ])}
                   mobileRows={users.map((user) => ({
                     key: user.id,
@@ -402,6 +421,19 @@ export default async function AdminDashboard({ searchParams }) {
                         label: "Role",
                         value: user.is_admin ? "Admin" : "User",
                       },
+                      {
+                        label: "Status",
+                        value: (
+                          <StatusPill
+                            tone={getAccountTone(user.account_status)}
+                            label={user.account_status || "active"}
+                          />
+                        ),
+                      },
+                      {
+                        label: "Actions",
+                        value: renderUserActionMenu(user),
+                      },
                     ],
                   }))}
                 />
@@ -414,7 +446,7 @@ export default async function AdminDashboard({ searchParams }) {
                 description="A responsive table for tracking community content and engagement."
               >
                 <ResponsiveTable
-                  columns={["Preview", "User", "Community", "Type", "Views", "Created"]}
+                  columns={["Preview", "User", "Community", "Type", "Views", "Status", "Created", "Actions"]}
                   emptyLabel="No posts matched your search."
                   rows={posts.map((post) => [
                     truncateText(getPostPreview(post), 90),
@@ -422,7 +454,13 @@ export default async function AdminDashboard({ searchParams }) {
                     post.communityId || "General",
                     post.mediaType || "text",
                     String(post.views ?? 0),
+                    <StatusPill
+                      key={`${post.id}-status`}
+                      tone={getPostTone(post.moderation_status)}
+                      label={post.moderation_status || "active"}
+                    />,
                     formatDate(post.created_at),
+                    renderPostActionMenu(post),
                   ])}
                   mobileRows={posts.map((post) => ({
                     key: post.id,
@@ -436,8 +474,21 @@ export default async function AdminDashboard({ searchParams }) {
                       { label: "Type", value: post.mediaType || "text" },
                       { label: "Views", value: String(post.views ?? 0) },
                       {
+                        label: "Status",
+                        value: (
+                          <StatusPill
+                            tone={getPostTone(post.moderation_status)}
+                            label={post.moderation_status || "active"}
+                          />
+                        ),
+                      },
+                      {
                         label: "Created",
                         value: formatDate(post.created_at),
+                      },
+                      {
+                        label: "Actions",
+                        value: renderPostActionMenu(post),
                       },
                     ],
                   }))}
@@ -451,7 +502,7 @@ export default async function AdminDashboard({ searchParams }) {
                 description="A responsive table for reviewing moderation signals and report state."
               >
                 <ResponsiveTable
-                  columns={["Reason", "Type", "Status", "Target", "Reporter", "Created"]}
+                  columns={["Reason", "Type", "Status", "Target", "Reporter", "Created", "Actions"]}
                   emptyLabel="No reports matched your search."
                   rows={reports.map((report) => [
                     report.reason || "Report",
@@ -466,6 +517,7 @@ export default async function AdminDashboard({ searchParams }) {
                       : truncateId(report.reported_user_id),
                     truncateId(report.reporter_id),
                     formatDate(report.created_at),
+                    renderReportActionMenu(report),
                   ])}
                   mobileRows={reports.map((report) => ({
                     key: report.id,
@@ -488,6 +540,10 @@ export default async function AdminDashboard({ searchParams }) {
                         label: "Created",
                         value: formatDate(report.created_at),
                       },
+                      {
+                        label: "Actions",
+                        value: renderReportActionMenu(report),
+                      },
                     ],
                   }))}
                 />
@@ -496,10 +552,19 @@ export default async function AdminDashboard({ searchParams }) {
 
             {activeView === "home-cards" ? (
               <TablePanel
-                title="Home card uploads"
-                description="Upload the images used for the homepage cards without leaving the admin dashboard."
+                title="Home card manager"
+                description="Search, filter, preview, upload, update, and delete the images used across the homepage cards."
               >
-                <HomeCardUploadForm />
+                <HomeCardManager
+                  cards={homeCardImages}
+                  counts={homeCardCounts}
+                  searchQuery={searchQuery}
+                  sectionFilter={homeCardSection}
+                  filterOptions={buildHomeCardFilterOptions(
+                    homeCardCounts,
+                    searchQuery
+                  )}
+                />
               </TablePanel>
             ) : null}
           </div>
@@ -570,8 +635,8 @@ function ResponsiveTable({ columns, rows, mobileRows, emptyLabel }) {
 
   return (
     <>
-      <div className="hidden overflow-hidden rounded-[1.4rem] border border-slate-200/80 md:block">
-        <div className="overflow-x-auto">
+      <div className="hidden rounded-[1.4rem] border border-slate-200/80 bg-white shadow-[0_12px_32px_rgba(15,23,42,0.04)] md:block">
+        <div className="overflow-x-auto overflow-y-visible rounded-[1.4rem]">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
@@ -591,7 +656,9 @@ function ResponsiveTable({ columns, rows, mobileRows, emptyLabel }) {
                   {row.map((cell, cellIndex) => (
                     <td
                       key={cellIndex}
-                      className="px-5 py-4 text-sm leading-7 text-slate-700"
+                      className={`px-5 py-4 text-sm leading-7 text-slate-700 ${
+                        cellIndex === row.length - 1 ? "relative overflow-visible" : ""
+                      }`}
                     >
                       {cell}
                     </td>
@@ -645,6 +712,41 @@ function StatusPill({ tone, label }) {
     >
       {label}
     </span>
+  );
+}
+
+function renderUserActionMenu(user) {
+  return (
+    <ModerationActionMenu
+      kind="user"
+      recordId={user.id}
+      currentStatus={user.account_status || "active"}
+      defaultReason={user.moderation_reason || ""}
+    />
+  );
+}
+
+function renderPostActionMenu(post) {
+  return (
+    <ModerationActionMenu
+      kind="post"
+      recordId={post.id}
+      currentStatus={post.moderation_status || "active"}
+      defaultReason={post.moderation_reason || ""}
+    />
+  );
+}
+
+function renderReportActionMenu(report) {
+  return (
+    <ModerationActionMenu
+      kind="report"
+      recordId={report.id}
+      targetType={report.target_type}
+      targetId={report.target_type === "post" ? report.reported_post_id : report.reported_user_id}
+      currentStatus={report.status || "pending"}
+      defaultReason={report.reason || ""}
+    />
   );
 }
 
@@ -713,12 +815,16 @@ function getViewLabel(view) {
   return views.find((item) => item.key === view)?.label || "Overview";
 }
 
-function buildAdminHref(view, query) {
+function buildAdminHref(view, query, section) {
   const params = new URLSearchParams();
   params.set("view", view);
 
   if (query) {
     params.set("q", query);
+  }
+
+  if (view === "home-cards" && section) {
+    params.set("section", section);
   }
 
   return `/admin?${params.toString()}`;
@@ -738,7 +844,7 @@ function filterUsers(users, query) {
   }
 
   return users.filter((user) =>
-    [user.name, user.username, user.email].some((value) =>
+    [user.name, user.username, user.email, user.account_status].some((value) =>
       includesText(value, query)
     )
   );
@@ -750,7 +856,7 @@ function filterPosts(posts, query) {
   }
 
   return posts.filter((post) =>
-    [post.content, post.communityId, post.mediaType, post.userid].some((value) =>
+    [post.content, post.communityId, post.mediaType, post.userid, post.moderation_status].some((value) =>
       includesText(value, query)
     )
   );
@@ -766,6 +872,8 @@ function filterReports(reports, query) {
       report.reason,
       report.details,
       report.status,
+      report.action_taken,
+      report.admin_note,
       report.target_type,
       report.reported_user_id,
       report.reported_post_id,
@@ -777,7 +885,11 @@ function filterReports(reports, query) {
 function getReportTone(status) {
   const normalizedStatus = String(status || "pending").toLowerCase();
 
-  if (normalizedStatus === "resolved" || normalizedStatus === "closed") {
+  if (
+    normalizedStatus === "resolved" ||
+    normalizedStatus === "closed" ||
+    normalizedStatus === "actioned"
+  ) {
     return "emerald";
   }
 
@@ -790,4 +902,137 @@ function getReportTone(status) {
   }
 
   return "amber";
+}
+
+function getAccountTone(status) {
+  const normalizedStatus = String(status || "active").toLowerCase();
+
+  if (normalizedStatus === "banned") {
+    return "rose";
+  }
+
+  if (normalizedStatus === "suspended") {
+    return "amber";
+  }
+
+  return "emerald";
+}
+
+function getPostTone(status) {
+  const normalizedStatus = String(status || "active").toLowerCase();
+
+  if (normalizedStatus === "removed") {
+    return "rose";
+  }
+
+  if (normalizedStatus === "hidden") {
+    return "amber";
+  }
+
+  return "emerald";
+}
+
+function normalizeHomeCardSection(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  return ["venters", "listeners", "community"].includes(normalized)
+    ? normalized
+    : "";
+}
+
+function getAdminSearchSummary({ activeView, searchQuery, homeCardSection }) {
+  if (activeView === "home-cards") {
+    if (searchQuery && homeCardSection) {
+      return `Showing home card images matching "${searchQuery}" in ${formatHomeCardSection(homeCardSection)}.`;
+    }
+
+    if (searchQuery) {
+      return `Showing home card images matching "${searchQuery}".`;
+    }
+
+    if (homeCardSection) {
+      return `Showing all home card images assigned to ${formatHomeCardSection(homeCardSection)}.`;
+    }
+
+    return "Search by section or URL, then preview, update, or remove images from one management workspace.";
+  }
+
+  return searchQuery
+    ? `Showing filtered results for "${searchQuery}".`
+    : "Search by name, username, email, post text, report reason, or status.";
+}
+
+function filterHomeCardImages(images, query, section) {
+  return images.filter((image) => {
+    const matchesSection = section ? String(image.title || "").toLowerCase() === section : true;
+    const matchesQuery = query
+      ? [image.title, image.image_url, image.id].some((value) => includesText(value, query))
+      : true;
+
+    return matchesSection && matchesQuery;
+  });
+}
+
+function sortHomeCardImages(images) {
+  return [...images].sort((left, right) => {
+    const leftTime = getSortableTime(left.created_at || left.createdat);
+    const rightTime = getSortableTime(right.created_at || right.createdat);
+
+    return rightTime - leftTime;
+  });
+}
+
+function getSortableTime(value) {
+  const time = new Date(value || 0).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function countHomeCardImages(images) {
+  return {
+    total: images.length,
+    venters: images.filter((image) => String(image.title || "").toLowerCase() === "venters").length,
+    listeners: images.filter((image) => String(image.title || "").toLowerCase() === "listeners").length,
+    community: images.filter((image) => String(image.title || "").toLowerCase() === "community").length,
+  };
+}
+
+function buildHomeCardFilterOptions(counts, query) {
+  return [
+    {
+      value: "",
+      label: "All sections",
+      count: counts.total,
+      href: buildAdminHref("home-cards", query, ""),
+    },
+    {
+      value: "venters",
+      label: "Venters",
+      count: counts.venters,
+      href: buildAdminHref("home-cards", query, "venters"),
+    },
+    {
+      value: "listeners",
+      label: "Listeners",
+      count: counts.listeners,
+      href: buildAdminHref("home-cards", query, "listeners"),
+    },
+    {
+      value: "community",
+      label: "Community",
+      count: counts.community,
+      href: buildAdminHref("home-cards", query, "community"),
+    },
+  ];
+}
+
+function formatHomeCardSection(value) {
+  if (!value) {
+    return "all sections";
+  }
+
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
